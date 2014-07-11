@@ -15,11 +15,22 @@ const (
 	errorOpcode uint16 = iota
 )
 
+type TftpRequest interface {
+	getType() uint16
+}
 
 type IORequest struct {
 	isWrite bool
 	filename string
 	mode string
+}
+
+func (i IORequest) getType() uint16 {
+	if i.isWrite {
+		return i.writeOpcode
+	} else {
+		return i.readOpcode
+	}
 }
 
 func parseIORequest(byteSlice []byte) (IORequest, error) {
@@ -75,6 +86,9 @@ type DataBlock struct {
 	data []byte
 }
 
+func (d DataBlock) getType() uint16 {
+	return dataBlockOpcode
+}
 
 func parseDataBlock(byteSlice []byte) (DataBlock, error) {
 	if byteSlice == nil || len(byteSlice) < 4 {
@@ -109,6 +123,10 @@ type Ack struct {
 	blockNumber uint16
 }
 
+func (a Ack) getType() uint16 {
+	return ackOpcode
+}
+
 func parseAck(byteSlice []byte) (Ack, error) {
 	if byteSlice == nil || len(byteSlice) < 4 {
 		return Ack{}, errors.New("byteSlice parameter was nil or number of bytes in byteSlice is less than 4 for a data block")
@@ -138,6 +156,10 @@ func ackToSlice(ack Ack) []byte {
 type TftpError struct {
 	errorCode uint16
 	errMsg string
+}
+
+func (e TftpError) getType() uint16 {
+	return errorOpcode
 }
 
 func parseTftpErrorSlice(byteSlice []byte) (TftpError, error) {
