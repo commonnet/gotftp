@@ -125,6 +125,10 @@ func TestDataBlockBasicParseSuccess(t *testing.T) {
 	if bytes.Compare(byteSlice[4:len(byteSlice)], dataBlock.data) != 0 {
 		t.Error("data block parse error, data mismatch")
 	}
+
+	if !dataBlock.isFinal() {
+		t.Error("data block length is less than 512 but was not considered as final")
+	}
 }
 
 func TestDataBlockOpcodeParseFailure(t *testing.T) {
@@ -166,9 +170,12 @@ func TestDataBlockBasicToSliceSuccess(t *testing.T) {
 	expectedDataBlockBytes := []byte{0,3,0,1,0,1,2}
 
 	dataBlock := DataBlock{blockNumber, dataBytes}
-	dataBlockBytes := dataBlockToSlice(dataBlock)
 
-	if bytes.Compare(dataBlockBytes, expectedDataBlockBytes) != 0 {
+	dataBlockLength :=  4 + len(dataBlock.data)
+	dataBlockSlice := make([]byte, dataBlockLength)
+	dataBlockToSlice(dataBlock, dataBlockSlice)
+
+	if bytes.Compare(dataBlockSlice, expectedDataBlockBytes) != 0 {
 		t.Error("serialized data block does not match the expected data block bytes")
 	}
 
@@ -227,9 +234,12 @@ func TestAckBasicToSliceSuccess(t *testing.T) {
 	expectedAckBytes := []byte{0,4,0,1}
 
 	ack := Ack{blockNumber}
-	ackBytes := ackToSlice(ack)
 
-	if bytes.Compare(ackBytes, expectedAckBytes) != 0 {
+	ackLength := 4
+	ackSlice := make([]byte, ackLength)
+	ackToSlice(ack, ackSlice)
+
+	if bytes.Compare(ackSlice, expectedAckBytes) != 0 {
 		t.Error("serialized ack does not match the expected data block bytes")
 	}
 
@@ -337,9 +347,13 @@ func TestTftpErrorBasicToSliceSuccess(t *testing.T) {
 	errorMsg := "abc"
 
 	tftpErr := TftpError{errorCode, errorMsg}
-	tftpBytes := toTftpErrorSlice(tftpErr)
 
-	if bytes.Compare(tftpBytes, expectedErrorBytes) != 0 {
+	errorLength :=  4 + len(tftpErr.errMsg) + 1
+	errorSlice := make([]byte, errorLength)
+
+	toTftpErrorSlice(tftpErr, errorSlice)
+
+	if bytes.Compare(errorSlice, expectedErrorBytes) != 0 {
 		t.Error("serialized ack does not match the expected data block bytes")
 	}
 

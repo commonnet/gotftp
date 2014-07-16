@@ -27,9 +27,9 @@ type IORequest struct {
 
 func (i IORequest) getType() uint16 {
 	if i.isWrite {
-		return i.writeOpcode
+		return writeOpcode
 	} else {
-		return i.readOpcode
+		return readOpcode
 	}
 }
 
@@ -90,6 +90,14 @@ func (d DataBlock) getType() uint16 {
 	return dataBlockOpcode
 }
 
+func (d DataBlock) isFinal() bool {
+	if len(d.data) < 512 {
+		return true
+	} else {
+		return false
+	}
+}
+
 func parseDataBlock(byteSlice []byte) (DataBlock, error) {
 	if byteSlice == nil || len(byteSlice) < 4 {
 		return DataBlock{}, errors.New("byteSlice parameter was nil or number of bytes in byteSlice is less than 4 for a data block")
@@ -107,15 +115,15 @@ func parseDataBlock(byteSlice []byte) (DataBlock, error) {
 }
 
 
-func dataBlockToSlice(dataBlock DataBlock) []byte {
-	dataBlockLength :=  4 + len(dataBlock.data)
-	dataBlockSlice := make([]byte, dataBlockLength)
+func dataBlockToSlice(dataBlock DataBlock, dataBlockSlice []byte) int {
 
+	dataBlockLength := 4 + len(dataBlock.data)
 	binary.BigEndian.PutUint16(dataBlockSlice[0:2], dataBlockOpcode)
 	binary.BigEndian.PutUint16(dataBlockSlice[2:4], dataBlock.blockNumber)
 	copy(dataBlockSlice[4:dataBlockLength], dataBlock.data)
 
-	return dataBlockSlice
+	return dataBlockLength
+
 }
 
 
@@ -143,14 +151,13 @@ func parseAck(byteSlice []byte) (Ack, error) {
 }
 
 
-func ackToSlice(ack Ack) []byte {
-	ackLength :=  4
-	ackSlice := make([]byte, ackLength)
+func ackToSlice(ack Ack, ackSlice []byte) int {
 
 	binary.BigEndian.PutUint16(ackSlice[0:2], ackOpcode)
 	binary.BigEndian.PutUint16(ackSlice[2:4], ack.blockNumber)
 
-	return ackSlice
+	return 4
+
 }
 
 type TftpError struct {
@@ -195,15 +202,15 @@ func parseTftpErrorSlice(byteSlice []byte) (TftpError, error) {
 
 }
 
-func toTftpErrorSlice(tftpError TftpError) ([]byte) {
+func toTftpErrorSlice(tftpError TftpError, errorSlice []byte) int {
 	errorLength :=  4 + len(tftpError.errMsg) + 1
-	errorSlice := make([]byte, errorLength)
 
 	binary.BigEndian.PutUint16(errorSlice[0:2], errorOpcode)
 	binary.BigEndian.PutUint16(errorSlice[2:4], tftpError.errorCode)
 
 	copy(errorSlice[4:errorLength], []byte(tftpError.errMsg))
 
-	return errorSlice
+	return errorLength
+
 }
 

@@ -1,96 +1,152 @@
 package gotftp
 
+/*
 import (
-	"encoding/binary"
 	"fmt"
 	"net"
+	"os"
+	"time"
+)
+/*
+const (
+	maxUDPPacketSize = 65507
+	maxPacketSize = 520
+	maxRequestSize = 516
+	maxDataBufSize = 512
+	ackSize = 4
+	readTimeout = 8e9
+	writeTimeout = 8e9
 )
 
 const (
-	maxPacketSize = 520
+	ioRequestState = iota
+	readState = iota
+	writeState = iota
 )
 
-type Request struct {
-	conn *net.PacketConn
-	localAddr Addr
-	remoteAddr Addr
-	request TftpRequest
+const (
+	fsroot = "/home/ubuntu/root/"
+	fstmp = "/home/ubuntu/tmp/"
+)
+
+func ProcessReadRequest(conn *net.PacketConn, addr net.Addr, ioRequest IORequest) (error) {
+	dataBlockNumber := 0
+	dataBuf := make([]byte, maxDataBufSize)
+	ackBuf := make([]byte, ackSize)
+
+	file, err := os.Open(fmt.Sprintf("%s%s", fsroot, ioRequest.filename))
+	if err != nil {
+		sendError(conn, addr, fileNotFoundError, err.String())
+		conn.Close()
+	}
+
+	retries := 3
+
+	for {
+		numBytes, err := file.ReadAt(dataBuf, int64(dataBlockNumber))
+		if err != nil {
+			sendError(conn, addr, ioerror, err.String())
+			conn.Close()
+		}
+
+		dataBlock := DataBlock{dataBlockNumber, dataBuf[:numBytes]}
+		dataBlockResponseSlice := dataBlockToSlice(dataBlock)
+
+		success := false
+		for i:=0; i<3 && !success; i:=i+1 {
+			conn.SetWriteDeadline(time.Now().Add(time.Duration(writeTimeout)))
+			numBytes, err := conn.WriteTo(dataBlockResponseSlice, addr)
+			if numBytes == len(dataBlockResponseSlice) && err == nil {
+				success := true
+			}
+		}
+
+		if !success {
+			sendError(conn, addr, ioerror, err.String())
+			conn.Close()
+		}
+
+		conn.SetReadDeadline(time.Now().Add(time.Duration(readTimeout)))
+		numBytes, _, err := conn.ReadFrom(ackBuf)
+		if err != nil {
+			sendError(conn, addr, ioerror, err.String())
+			conn.Close()
+		}
+
+		ack, err := parseAck(ackBuf)
+		if err != nil {
+
+		}
+	}
 }
 
-func ReadRequest(connections chan *net.PacketConn, requests chan *Request) {
+//ProcessIORequest reads a read/write tftp request from the connection
+func ProcessIORequest(conn *net.PacketConn, buf []byte) (IORequest, net.Addr) {
 
+	conn.SetReadDeadline(time.Now().Add(time.Duration(readTimeout)))
+	numBytes, addr, err := conn.ReadFrom(buf)
+	if err != nil {
+		sendError(conn, addr, parseError, err.String())
+		conn.Close()
+	}
+
+	ioRequest, err := parseIORequest(buf[:numBytes])
+	if err != nil {
+		sendError(conn, addr, parseError, err.String())
+		conn.Close()
+	}
+
+	return ioRequest, addr
+
+}
+
+//ProcessRequest is a simple state machine per connection that reads
+//a request from the udp connection and sends a response.
+//process request tracks a bunch of state:
+// 1. Read/Write request(IORequest) that triggered the session.
+// 2. The last data block number.
+// 3. The last response packet.
+//
+//state machine.
+// iorequeststate
+// readstate
+// writestate
+func ProcessRequest(connections chan *net.PacketConn) {
+
+	ioRequestBuf := make([]byte, maxUDPPacketSize)
+	responseBuf := make([]byte, maxPacketSize)
 	origBuf := make([]byte, maxPacketSize)
-	maxPacketSizeError := toTftpErrorSlice(TftpError{0, "max packet size exceeded"})
-	unknownOpcodeError := toTftpErrorSlice(TftpError{0, "unknown opcode"})
-	parseError := toTftpErrorSlice(TftpError{0, "error parsing packet"})
+
+	dataBlockNumber := 0
+	ioRequest := nil
+	addr := nil
 
 	// TODO : better logging / instrumentation
 	for conn := range connections {
-		numBytes, addr, err := conn.ReadFrom(origBuf)
-		if err != nil {
-			conn.Close()
-			continue
+		currentState := ioRequestState
+
+		for {
+			switch currentState {
+			case ioRequestState:
+				ioRequest, addr := ProcessIORequest(conn, ioRequestBuf)
+				if ioRequest.isWrite {
+					currentState := writeState
+				} else {
+					currentState := readState
+				}
+			case readState:
+				err := ProcessReadRequest(conn, addr, ioRequest)
+			case writeState:
+				err := ProcessWriteRequest(conn, addr, ioRequest)
+			default:
+				// don't know how I got here, send error and close connection.
+			}
+
+			if err != nil {
+				break
+			}
 		}
-
-		if numBytes > 516 {
-			conn.WriteTo(maxPacketSizeError, addr)
-			conn.Close()
-			continue
-		}
-
-		buf := origBuf[:numBytes]
-
-		opcode := binary.BigEndian.Uint16(buf[0:2])
-
-		err := nil
-		tftpRequest := nil
-
-		switch opcode {
-		case 1 || 2: ioRequest, err := parseIORequest(buf)
-					 tftpRequest = TftpRequest(ioRequest)
-		case 3: dataBlockRequest, err := parseDataBlock(buf)
-				tftpRequest = TftpRequest(dataBlockRequest)
-		case 4: ackRequest, err := parseAck(buf)
-				tftpRequest = TftpRequest(ackRequest)
-		case 5: errorRequest, err := parseTftpErrorSlice(buf)
-				tftpRequest = TftpRequest(errorRequest)
-		}
-
-		if tftpRequest == nil {
-			conn.WriteTo(unknownOpcodeError, addr)
-			conn.Close()
-			continue
-		}
-
-		if err != nil {
-			conn.WriteTo(parseError, addr)
-			conn.Close()
-			continue
-		}
-
-		requests <- Request{conn.LocalAddr(), addr, tftpRequest}
 	}
-
-}
-
-func WriteResponse(requests chan* Request, connections chan *net.PacketConn) {
-
-	origBuf := make([]byte, maxPacketSize)
-
-	// TODO : better logging / instrumentation
-	for request := range requests {
-
-		switch request.request.getType() {
-		case 1:
-		case 2:
-		case 3:
-		case 4:
-		case 5:
-		}
-
-		connections <- request.conn
-	}
-
 
 }
 
@@ -139,3 +195,142 @@ func main() {
 	UDPServer("127.0.0.1", 8000, &run, connections)
 }
 
+
+/*
+for {
+			numBytes, addr, err := conn.ReadFrom(origBuf)
+			if err != nil {
+				conn.Close()
+				continue
+			}
+
+			if numBytes > 516 {
+				conn.WriteTo(maxPacketSizeError, addr)
+				conn.Close()
+				continue
+			}
+
+			buf := origBuf[:numBytes]
+
+			opcode := binary.BigEndian.Uint16(buf[0:2])
+
+			err := nil
+
+			switch opcode {
+			case 1 || 2: ioRequest, err := parseIORequest(buf)
+						 processIORequest(ioRequest, conn, addr)
+			case 3: dataBlockRequest, err := parseDataBlock(buf)
+				tftpRequest = TftpRequest(dataBlockRequest)
+			case 4: ackRequest, err := parseAck(buf)
+				tftpRequest = TftpRequest(ackRequest)
+			case 5: errorRequest, err := parseTftpErrorSlice(buf)
+				tftpRequest = TftpRequest(errorRequest)
+			}
+
+			if tftpRequest == nil {
+				conn.WriteTo(unknownOpcodeError, addr)
+				conn.Close()
+				continue
+			}
+
+			if err != nil {
+				conn.WriteTo(parseError, addr)
+				conn.Close()
+				continue
+			}
+
+			requests <- Request{conn.LocalAddr(), addr, tftpRequest}
+
+				maxPacketSizeError := toTftpErrorSlice(TftpError{0, "max packet size exceeded"})
+	unknownOpcodeError := toTftpErrorSlice(TftpError{0, "unknown opcode"})
+	parseError := toTftpErrorSlice(TftpError{0, "error parsing packet"})
+ */
+
+import (
+	"errors"
+	"file"
+	"fmt"
+	"net"
+	"os"
+	"time"
+)
+
+const (
+	maxDataBufSize = 512
+	maxDataBlockSize = 520
+
+	readTimeout = 8e9
+)
+
+const (
+	fsroot = "/home/ubuntu/root/"
+	fstmp = "/home/ubuntu/tmp/"
+)
+
+/*
+Read State Machine:
+
+1. Incoming Connection.
+2. Read Request contains file name / mode.
+3. Send DataBlockNumber i.
+4. Receive Ack DataBlockNumber i. On timeout re-send DataBlockNumber i. if retries > x, send error, close conn.
+5. If remaining data, Goto Step 3, else exit.
+*/
+func processReadRequest(conn *net.PacketConn, addr net.Addr, readRequest IORequest) error {
+
+	dataBlockNumber := 0
+
+	dataBuf := make([]byte, maxDataBufSize)
+	dataBlockBuf := make([]byte, maxDataBlockSize)
+
+	ackBuf := make([]byte, 4)
+
+	file, err := os.Open(fmt.Sprintf("%s%s", fsroot, readRequest.filename))
+	if err != nil {
+		return err
+	}
+
+	for {
+		numBytes, err := file.ReadAt(dataBuf, int64(dataBlockNumber * maxDataBufSize))
+		if err != nil {
+			return err
+		}
+
+		dataBlock := DataBlock{dataBlockNumber, dataBuf[:numBytes]}
+		numBytes = dataBlockToSlice(dataBlock, dataBlockBuf)
+
+		conn.WriteTo(dataBlockBuf[:numBytes], addr)
+		conn.SetReadDeadline(time.Now().Add(time.Duration(readTimeout)))
+		_, addr, err := conn.ReadFrom(ackBuf)
+
+		if err != nil {
+			return err
+		}
+
+		ack, err := parseAck(ackBuf)
+		if err != nil {
+			return err
+		}
+
+		if ack.blockNumber != uint16(dataBlockNumber) {
+			return errors.New(fmt.Sprintf("expected datablock %s got %s", dataBlockNumber, ack.blockNumber))
+		}
+
+		dataBlockNumber = dataBlockNumber+1
+
+		if numBytes < 512 {
+			break
+		}
+	}
+	return nil
+}
+
+/*
+Write State Machine:
+
+1. Incoming Connection.
+2. Write Request contains file name / mode.
+3. Send Ack DataBlockNumber i.
+4. Receive DataBlockNumber i+1. On timeout re-send Ack DataBlockNumber i. if retries > x, send error, close conn.
+5. If datablock length < 512, Goto step 3 and exit, else Goto Step 3 and repeat.
+*/
