@@ -248,8 +248,8 @@ for {
 
 import (
 	"errors"
-	"file"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"time"
@@ -258,14 +258,49 @@ import (
 const (
 	maxDataBufSize = 512
 	maxDataBlockSize = 520
-
-	readTimeout = 8e9
 )
 
-const (
-	fsroot = "/home/ubuntu/root/"
-	fstmp = "/home/ubuntu/tmp/"
-)
+type Config interface {
+	getFSRoot() string
+	getFSTmp() string
+}
+
+type TftpConfig struct {
+	fsroot string
+	fstmp string
+}
+
+func (t TftpConfig) getFSRoot() string {
+	return t.fsroot
+}
+
+func (t TftpConfig) getFSTmp() string {
+	return t.fstmp
+}
+
+type Connection interface {
+	WriteTo([]byte) (numBytes int, err error)
+	ReadFrom([]byte) (numBytes int, err error)
+}
+
+type UDPConnection struct {
+	addr net.Addr
+	conn net.UDPConn
+	writeTimeout int
+	readTimeout int
+}
+
+func (u *UDPConnection) writeTo(buf []byte) (numBytes int, err error) {
+	u.conn.SetWriteDeadline(time.Now().Add(time.Duration(u.writeTimeout)))
+	numBytes, err = u.conn.WriteTo(buf, u.addr)
+	return numBytes, err
+}
+
+func (u *UDPConnection) readFrom(buf []byte) (numBytes int, err error) {
+	u.conn.SetReadDeadline(time.Now().Add(time.Duration(u.readTimeout)))
+	numBytes, _, err = u.conn.ReadFrom(buf)
+	return numBytes, err
+}
 
 /*
 Read State Machine:
@@ -276,32 +311,39 @@ Read State Machine:
 4. Receive Ack DataBlockNumber i. On timeout re-send DataBlockNumber i. if retries > x, send error, close conn.
 5. If remaining data, Goto Step 3, else exit.
 */
-func processReadRequest(conn *net.PacketConn, addr net.Addr, readRequest IORequest) error {
+func processReadRequest(conn Connection, readRequest IORequest, config Config) error {
 
-	dataBlockNumber := 0
+	dataBlockNumber := uint16(1)
 
 	dataBuf := make([]byte, maxDataBufSize)
 	dataBlockBuf := make([]byte, maxDataBlockSize)
 
 	ackBuf := make([]byte, 4)
 
-	file, err := os.Open(fmt.Sprintf("%s%s", fsroot, readRequest.filename))
+
+	file, err := os.Open(fmt.Sprintf("%s%s", config.getFSRoot(), readRequest.filename))
+	defer file.Close()
+
 	if err != nil {
 		return err
 	}
 
 	for {
-		numBytes, err := file.ReadAt(dataBuf, int64(dataBlockNumber * maxDataBufSize))
-		if err != nil {
+		numBytes, err := file.ReadAt(dataBuf, int64((dataBlockNumber-1) * maxDataBufSize))
+		if err != nil && err != io.EOF {
 			return err
 		}
 
 		dataBlock := DataBlock{dataBlockNumber, dataBuf[:numBytes]}
 		numBytes = dataBlockToSlice(dataBlock, dataBlockBuf)
 
-		conn.WriteTo(dataBlockBuf[:numBytes], addr)
-		conn.SetReadDeadline(time.Now().Add(time.Duration(readTimeout)))
-		_, addr, err := conn.ReadFrom(ackBuf)
+		_, err = conn.WriteTo(dataBlockBuf[:numBytes])
+
+		if err != nil {
+			return err
+		}
+
+		_, err = conn.ReadFrom(ackBuf)
 
 		if err != nil {
 			return err
@@ -313,12 +355,12 @@ func processReadRequest(conn *net.PacketConn, addr net.Addr, readRequest IOReque
 		}
 
 		if ack.blockNumber != uint16(dataBlockNumber) {
-			return errors.New(fmt.Sprintf("expected datablock %s got %s", dataBlockNumber, ack.blockNumber))
+			return errors.New(fmt.Sprintf("expected datablock %d got %d", dataBlockNumber, ack.blockNumber))
 		}
 
 		dataBlockNumber = dataBlockNumber+1
 
-		if numBytes < 512 {
+		if numBytes < 516 {
 			break
 		}
 	}
@@ -334,3 +376,63 @@ Write State Machine:
 4. Receive DataBlockNumber i+1. On timeout re-send Ack DataBlockNumber i. if retries > x, send error, close conn.
 5. If datablock length < 512, Goto step 3 and exit, else Goto Step 3 and repeat.
 */
+func processWriteRequest(conn Connection, writeRequest IORequest, config Config) error {
+
+	dataBlockNumber := uint16(0)
+
+	dataBlockBuf := make([]byte, maxDataBlockSize)
+
+	ackBuf := make([]byte, 4)
+
+
+	file, err := os.Create(fmt.Sprintf("%s%s", config.getFSTmp(), writeRequest.filename))
+	defer file.Close()
+
+	if err != nil {
+		return err
+	}
+
+	for {
+		ack := Ack{dataBlockNumber}
+		ackToSlice(ack, ackBuf)
+
+		numBytes, err := conn.WriteTo(ackBuf)
+
+		dataBlockNumber = dataBlockNumber+1
+
+		if err != nil {
+			return err
+		}
+
+		if numBytes != 4 {
+			return errors.New("unable to write complete ack response")
+		}
+
+		numBytes, err = conn.ReadFrom(dataBlockBuf)
+		if err != nil {
+			return err
+		}
+
+		dataBlock, err := parseDataBlock(dataBlockBuf[:numBytes])
+		if err != nil {
+			return err
+		}
+
+		if dataBlock.blockNumber != uint16(dataBlockNumber) {
+			return errors.New(fmt.Sprintf("expected datablock %d got %d", dataBlockNumber, dataBlock.blockNumber))
+		}
+
+		numBytes, err = file.Write(dataBlock.data)
+		if err != nil {
+			return err
+		}
+
+		if len(dataBlock.data) < maxDataBufSize {
+			file.Close()
+			os.Rename(fmt.Sprintf("%s%s", config.getFSTmp(), writeRequest.filename), fmt.Sprintf("%s%s", config.getFSRoot(), writeRequest.filename))
+			break
+		}
+	}
+	return nil
+}
+

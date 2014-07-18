@@ -28,9 +28,9 @@ type IORequest struct {
 func (i IORequest) getType() uint16 {
 	if i.isWrite {
 		return writeOpcode
-	} else {
-		return readOpcode
 	}
+
+	return readOpcode
 }
 
 func parseIORequest(byteSlice []byte) (IORequest, error) {
@@ -93,9 +93,9 @@ func (d DataBlock) getType() uint16 {
 func (d DataBlock) isFinal() bool {
 	if len(d.data) < 512 {
 		return true
-	} else {
-		return false
 	}
+
+	return false
 }
 
 func parseDataBlock(byteSlice []byte) (DataBlock, error) {
@@ -141,6 +141,7 @@ func parseAck(byteSlice []byte) (Ack, error) {
 	}
 
 	opcode := binary.BigEndian.Uint16(byteSlice[0:2])
+
 	if opcode != ackOpcode {
 		return Ack{}, errors.New("Invalid opcode")
 	}
