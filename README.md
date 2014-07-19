@@ -16,7 +16,40 @@ All parameters are required:
 <port>            The port the tftp server should listen on.
 
 Example:
-$$GOPATH/bin/gotftp /tmp/fsroot /tmp/fstmp 127.0.0.1 8000
+$ $GOPATH/bin/gotftp /tmp/fsroot /tmp/fstmp 127.0.0.1 8000
 
+The subset of tftp implemented is rfc1350: http://www.ietf.org/rfc/rfc1350.txt 
+This version of the tftp server returns an illegal request error for pretty much
+all the errors it encounters.
 
+Testing:
+$ $GOPATH/bin/gotftp /tmp/fsroot /tmp/fstmp 127.0.0.1 8000
+
+$ echo "hello world" > test.txt
+$ sudo apt-get install tftp
+$ tftp
+tftp> binary
+tftp> connect 127.0.0.1 8000
+tftp> put test.txt
+Sent 12 bytes in 0.0 seconds
+tftp> get test.txt
+Received 12 bytes in 0.0 seconds
+tftp>
+
+Getting Go Setup (2014-07-19):
+$ sudo apt-get install golang-go
+$ go env
+
+I use bash, I have the following in my .bashrc file.
+
+export GOROOT=/usr/lib/go
+export GOPATH=$HOME/go-workspace/gotftp
+export PATH=$PATH:${GOPATH//://bin:}/bin
+export PATH="$GOROOT:$PATH"
+
+$ source ~/.bashrc
+$ go env # validate the GOPATH and GOROOT settings
+
+Running the unit tests:
+/usr/bin/go test -v github.com/nalapati/gotftp
 
