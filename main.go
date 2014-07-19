@@ -330,13 +330,13 @@ func UDPServer(sessions chan* Session, config Config, run *bool) {
 	}
 }
 
-func usage(val int) {
+func Usage(val int) {
 	fmt.Println("./main <file system root> <file system tmp> <interface ip> <port>")
 	os.Exit(val)
 }
 
-// exists returns whether the given file or directory exists or not
-func exists(path string) (bool, error) {
+// Exists returns whether the given file or directory exists or not
+func Exists(path string) (bool, error) {
 	_, err := os.Stat(path)
 	if err == nil { return true, nil }
 	if os.IsNotExist(err) { return false, nil }
@@ -345,7 +345,7 @@ func exists(path string) (bool, error) {
 
 func main() {
 	if len(os.Args) < 4 {
-		usage(1)
+		Usage(1)
 	}
 
 	run := true
@@ -356,7 +356,7 @@ func main() {
 
 	config := TftpConfig{fsroot:os.Args[1], fstmp:os.Args[2], ip:os.Args[3], port:port}
 
-	dirExists, _ := exists(config.GetFSRoot())
+	dirExists, _ := Exists(config.GetFSRoot())
 	if !dirExists {
 		err := os.MkdirAll(config.GetFSRoot(), os.ModeDir | 0777)
 		if err != nil {
@@ -364,7 +364,7 @@ func main() {
 		}
 	}
 
-	dirExists, _ = exists(config.GetFSTmp())
+	dirExists, _ = Exists(config.GetFSTmp())
 	if !dirExists {
 		err := os.MkdirAll(config.GetFSTmp(), os.ModeDir | 0777)
 		if err != nil {

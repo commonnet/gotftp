@@ -45,8 +45,8 @@ func (m *MockConnection) ReadFrom(bytes []byte) (numBytes int, err error) {
 	return numBytes, nil
 }
 
-func initTest(config Config) {
-	dirExists, _ := exists(config.GetFSRoot())
+func InitTest(config Config) {
+	dirExists, _ := Exists(config.GetFSRoot())
 	if !dirExists {
 		err := os.Mkdir(config.GetFSRoot(), os.ModeDir | 0777)
 		if err != nil {
@@ -54,7 +54,7 @@ func initTest(config Config) {
 		}
 	}
 
-	dirExists, _ = exists(config.GetFSTmp())
+	dirExists, _ = Exists(config.GetFSTmp())
 	if !dirExists {
 		err := os.Mkdir(config.GetFSTmp(), os.ModeDir | 0777)
 		if err != nil {
@@ -63,7 +63,7 @@ func initTest(config Config) {
 	}
 }
 
-func closeTest(config Config) {
+func CloseTest(config Config) {
 	err := os.RemoveAll(config.GetFSRoot())
 	if err != nil {
 		panic(err)
@@ -78,8 +78,8 @@ func closeTest(config Config) {
 func TestProcessReadRequest(t *testing.T) {
 	config := TftpConfig{"/tmp/fsroot/", "/tmp/fstmp/", "127.0.0.1", 8000}
 
-	initTest(config)
-	defer closeTest(config)
+	InitTest(config)
+	defer CloseTest(config)
 
 	ioRequest := IORequest{isWrite:false, filename:"test.txt", mode:"octet"}
 
@@ -143,8 +143,8 @@ func CreateTestFile(filename string, length int) {
 func TestProcessWriteRequest(t *testing.T) {
 	config := TftpConfig{"/tmp/fsroot/", "/tmp/fstmp/", "127.0.0.1", 8000}
 
-	initTest(config)
-	defer closeTest(config)
+	InitTest(config)
+	defer CloseTest(config)
 
 	ioRequest := IORequest{isWrite:true, filename:"test.txt", mode:"octet"}
 
@@ -165,8 +165,8 @@ func TestProcessWriteRequest(t *testing.T) {
 
 	file.Close()
 
-	hashExpected, _ := getHash(fname)
-	hashActual, _ := getHash(fmt.Sprintf("%s%s", config.GetFSRoot(), "test.txt"))
+	hashExpected, _ := GetHash(fname)
+	hashActual, _ := GetHash(fmt.Sprintf("%s%s", config.GetFSRoot(), "test.txt"))
 
 	if hashExpected != hashActual {
 		t.Error("files mismatched while writing")
@@ -193,7 +193,7 @@ func WriteHandler(t *testing.T, f *os.File, ackBytes []byte, dataBlockBytes []by
 
 }
 
-func getHash(filename string) (uint32, error) {
+func GetHash(filename string) (uint32, error) {
 	bs, err := ioutil.ReadFile(filename)
 	if err != nil {
 		return 0, err
