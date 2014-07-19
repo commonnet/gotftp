@@ -358,7 +358,7 @@ func main() {
 
 	dirExists, _ := exists(config.getFSRoot())
 	if !dirExists {
-		err := os.Mkdir(config.getFSRoot(), os.ModeDir | 0777)
+		err := os.MkdirAll(config.getFSRoot(), os.ModeDir | 0777)
 		if err != nil {
 			panic(err)
 		}
@@ -366,7 +366,7 @@ func main() {
 
 	dirExists, _ = exists(config.getFSTmp())
 	if !dirExists {
-		err := os.Mkdir(config.getFSTmp(), os.ModeDir | 0777)
+		err := os.MkdirAll(config.getFSTmp(), os.ModeDir | 0777)
 		if err != nil {
 			panic(err)
 		}
