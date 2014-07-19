@@ -307,7 +307,8 @@ func UDPServer(sessions chan* Session, config Config, run *bool) {
 				fmt.Println(err, addr, ioRequest.filename)
 				connServ.WriteTo(error[:errorLength], addr)
 				connServ.Close()
-				break
+
+				continue
 			}
 
 			session := &Session{connection, ioRequest}
