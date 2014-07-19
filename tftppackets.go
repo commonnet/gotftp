@@ -16,7 +16,7 @@ const (
 )
 
 type TftpRequest interface {
-	getType() uint16
+	GetType() uint16
 }
 
 type IORequest struct {
@@ -25,7 +25,7 @@ type IORequest struct {
 	mode string
 }
 
-func (i IORequest) getType() uint16 {
+func (i IORequest) GetType() uint16 {
 	if i.isWrite {
 		return writeOpcode
 	}
@@ -33,7 +33,7 @@ func (i IORequest) getType() uint16 {
 	return readOpcode
 }
 
-func parseIORequest(byteSlice []byte) (IORequest, error) {
+func ParseIORequest(byteSlice []byte) (IORequest, error) {
 	if byteSlice == nil || len(byteSlice) < 4 {
 		return IORequest{}, errors.New("byteSlice parameter was nil")
 	}
@@ -86,11 +86,11 @@ type DataBlock struct {
 	data []byte
 }
 
-func (d DataBlock) getType() uint16 {
+func (d DataBlock) GetType() uint16 {
 	return dataBlockOpcode
 }
 
-func (d DataBlock) isFinal() bool {
+func (d DataBlock) IsFinal() bool {
 	if len(d.data) < 512 {
 		return true
 	}
@@ -98,7 +98,7 @@ func (d DataBlock) isFinal() bool {
 	return false
 }
 
-func parseDataBlock(byteSlice []byte) (DataBlock, error) {
+func ParseDataBlock(byteSlice []byte) (DataBlock, error) {
 	if byteSlice == nil || len(byteSlice) < 4 {
 		return DataBlock{}, errors.New("byteSlice parameter was nil or number of bytes in byteSlice is less than 4 for a data block")
 	}
@@ -115,7 +115,7 @@ func parseDataBlock(byteSlice []byte) (DataBlock, error) {
 }
 
 
-func dataBlockToSlice(dataBlock DataBlock, dataBlockSlice []byte) int {
+func DataBlockToSlice(dataBlock DataBlock, dataBlockSlice []byte) int {
 
 	dataBlockLength := 4 + len(dataBlock.data)
 	binary.BigEndian.PutUint16(dataBlockSlice[0:2], dataBlockOpcode)
@@ -131,11 +131,11 @@ type Ack struct {
 	blockNumber uint16
 }
 
-func (a Ack) getType() uint16 {
+func (a Ack) GetType() uint16 {
 	return ackOpcode
 }
 
-func parseAck(byteSlice []byte) (Ack, error) {
+func ParseAck(byteSlice []byte) (Ack, error) {
 	if byteSlice == nil || len(byteSlice) < 4 {
 		return Ack{}, errors.New("byteSlice parameter was nil or number of bytes in byteSlice is less than 4 for a data block")
 	}
@@ -152,7 +152,7 @@ func parseAck(byteSlice []byte) (Ack, error) {
 }
 
 
-func ackToSlice(ack Ack, ackSlice []byte) int {
+func AckToSlice(ack Ack, ackSlice []byte) int {
 
 	binary.BigEndian.PutUint16(ackSlice[0:2], ackOpcode)
 	binary.BigEndian.PutUint16(ackSlice[2:4], ack.blockNumber)
@@ -166,11 +166,11 @@ type TftpError struct {
 	errMsg string
 }
 
-func (e TftpError) getType() uint16 {
+func (e TftpError) GetType() uint16 {
 	return errorOpcode
 }
 
-func parseTftpErrorSlice(byteSlice []byte) (TftpError, error) {
+func ParseTftpErrorSlice(byteSlice []byte) (TftpError, error) {
 	if byteSlice == nil || len(byteSlice) < 4 {
 		return TftpError{}, errors.New("byteSlice parameter was nil")
 	}
@@ -203,7 +203,7 @@ func parseTftpErrorSlice(byteSlice []byte) (TftpError, error) {
 
 }
 
-func toTftpErrorSlice(tftpError TftpError, errorSlice []byte) int {
+func ToTftpErrorSlice(tftpError TftpError, errorSlice []byte) int {
 	errorLength :=  4 + len(tftpError.errMsg) + 1
 
 	binary.BigEndian.PutUint16(errorSlice[0:2], errorOpcode)

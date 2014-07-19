@@ -17,10 +17,10 @@ const (
 )
 
 type Config interface {
-	getFSRoot() string
-	getFSTmp() string
-	getTftpIP() string
-	getTftpPort() int
+	GetFSRoot() string
+	GetFSTmp() string
+	GetTftpIP() string
+	GetTftpPort() int
 }
 
 type TftpConfig struct {
@@ -30,19 +30,19 @@ type TftpConfig struct {
 	port int
 }
 
-func (t TftpConfig) getFSRoot() string {
+func (t TftpConfig) GetFSRoot() string {
 	return t.fsroot
 }
 
-func (t TftpConfig) getFSTmp() string {
+func (t TftpConfig) GetFSTmp() string {
 	return t.fstmp
 }
 
-func (t TftpConfig) getTftpIP() string {
+func (t TftpConfig) GetTftpIP() string {
 	return t.ip
 }
 
-func (t TftpConfig) getTftpPort() int {
+func (t TftpConfig) GetTftpPort() int {
 	return t.port
 }
 
@@ -84,7 +84,7 @@ Read State Machine:
 4. Receive Ack DataBlockNumber i. On timeout re-send DataBlockNumber i. if retries > x, send error, close conn.
 5. If remaining data, Goto Step 3, else exit.
 */
-func processReadRequest(conn Connection, readRequest IORequest, config Config) error {
+func ProcessReadRequest(conn Connection, readRequest IORequest, config Config) error {
 
 	dataBlockNumber := uint16(1)
 
@@ -93,7 +93,7 @@ func processReadRequest(conn Connection, readRequest IORequest, config Config) e
 
 	ackBuf := make([]byte, 4)
 
-	file, err := os.Open(fmt.Sprintf("%s%s", config.getFSRoot(), readRequest.filename))
+	file, err := os.Open(fmt.Sprintf("%s%s", config.GetFSRoot(), readRequest.filename))
 	if err != nil {
 		return err
 	}
@@ -107,7 +107,7 @@ func processReadRequest(conn Connection, readRequest IORequest, config Config) e
 		}
 
 		dataBlock := DataBlock{dataBlockNumber, dataBuf[:numBytes]}
-		numBytes = dataBlockToSlice(dataBlock, dataBlockBuf)
+		numBytes = DataBlockToSlice(dataBlock, dataBlockBuf)
 
 		_, err = conn.WriteTo(dataBlockBuf[:numBytes])
 
@@ -121,7 +121,7 @@ func processReadRequest(conn Connection, readRequest IORequest, config Config) e
 			return err
 		}
 
-		ack, err := parseAck(ackBuf)
+		ack, err := ParseAck(ackBuf)
 		if err != nil {
 			return err
 		}
@@ -150,7 +150,7 @@ Write State Machine:
 4. Receive DataBlockNumber i+1. On timeout re-send Ack DataBlockNumber i. if retries > x, send error, close conn.
 5. If datablock length < 512, Goto step 3 and exit, else Goto Step 3 and repeat.
 */
-func processWriteRequest(conn Connection, writeRequest IORequest, config Config) error {
+func ProcessWriteRequest(conn Connection, writeRequest IORequest, config Config) error {
 
 	dataBlockNumber := uint16(0)
 
@@ -160,7 +160,7 @@ func processWriteRequest(conn Connection, writeRequest IORequest, config Config)
 
 	final := false
 
-	file, err := os.Create(fmt.Sprintf("%s/%s", config.getFSTmp(), writeRequest.filename))
+	file, err := os.Create(fmt.Sprintf("%s/%s", config.GetFSTmp(), writeRequest.filename))
 	defer file.Close()
 
 	if err != nil {
@@ -169,7 +169,7 @@ func processWriteRequest(conn Connection, writeRequest IORequest, config Config)
 
 	for {
 		ack := Ack{dataBlockNumber}
-		ackToSlice(ack, ackBuf)
+		AckToSlice(ack, ackBuf)
 
 		numBytes, err := conn.WriteTo(ackBuf)
 
@@ -192,7 +192,7 @@ func processWriteRequest(conn Connection, writeRequest IORequest, config Config)
 			return err
 		}
 
-		dataBlock, err := parseDataBlock(dataBlockBuf[:numBytes])
+		dataBlock, err := ParseDataBlock(dataBlockBuf[:numBytes])
 		if err != nil {
 			return err
 		}
@@ -206,12 +206,12 @@ func processWriteRequest(conn Connection, writeRequest IORequest, config Config)
 			return err
 		}
 
-		if dataBlock.isFinal() {
+		if dataBlock.IsFinal() {
 			final = true
 			file.Close()
 
-			oldFilename := fmt.Sprintf("%s/%s", config.getFSTmp(), writeRequest.filename)
-			newFilename := fmt.Sprintf("%s/%s", config.getFSRoot(), writeRequest.filename)
+			oldFilename := fmt.Sprintf("%s/%s", config.GetFSTmp(), writeRequest.filename)
+			newFilename := fmt.Sprintf("%s/%s", config.GetFSRoot(), writeRequest.filename)
 			fmt.Printf("renaming %s to %s\n", oldFilename, newFilename)
 			os.Rename(oldFilename, newFilename)
 		}
@@ -227,19 +227,19 @@ func processWriteRequest(conn Connection, writeRequest IORequest, config Config)
 func HandleConnection(sessions chan* Session, config Config, run *bool) {
 
 	error := make([]byte, 48)
-	errorLength := toTftpErrorSlice(TftpError{0, "illegal request"}, error)
+	errorLength := ToTftpErrorSlice(TftpError{0, "illegal request"}, error)
 
 
 	for session := range sessions {
 
 		if (session.ioRequest.isWrite) {
-			err := processWriteRequest(session.connection, session.ioRequest, config)
+			err := ProcessWriteRequest(session.connection, session.ioRequest, config)
 			if err != nil {
 				fmt.Println(err)
 				session.connection.WriteTo(error[:errorLength])
 			}
 		} else {
-			err := processReadRequest(session.connection, session.ioRequest, config)
+			err := ProcessReadRequest(session.connection, session.ioRequest, config)
 			if err != nil {
 				fmt.Println(err)
 				session.connection.WriteTo(error[:errorLength])
@@ -257,16 +257,16 @@ func HandleConnection(sessions chan* Session, config Config, run *bool) {
 //connections to the connections channel. If the UDP server receives more connections
 //than it can handle it sends an error message to the client and closes the connection.
 func UDPServer(sessions chan* Session, config Config, run *bool) {
-	fmt.Println("starting UDP Server on ", config.getTftpIP(), config.getTftpPort(), *run)
+	fmt.Println("starting UDP Server on ", config.GetTftpIP(), config.GetTftpPort(), *run)
 
 	ioRequestBuf := make([]byte, maxIOrequestBufSize)
 
 	error := make([]byte, 48)
-	errorLength := toTftpErrorSlice(TftpError{0, "illegal request"}, error)
+	errorLength := ToTftpErrorSlice(TftpError{0, "illegal request"}, error)
 
 	addr := net.UDPAddr{
-		Port: config.getTftpPort(),
-		IP: net.ParseIP(config.getTftpIP()),
+		Port: config.GetTftpPort(),
+		IP: net.ParseIP(config.GetTftpIP()),
 	}
 
 	for (*run) {
@@ -288,7 +288,7 @@ func UDPServer(sessions chan* Session, config Config, run *bool) {
 
 			addrServ := net.UDPAddr{
 				Port: 0,
-				IP: net.ParseIP(config.getTftpIP()),
+				IP: net.ParseIP(config.GetTftpIP()),
 			}
 
 			connServ, err := net.ListenUDP("udp", &addrServ)
@@ -302,7 +302,7 @@ func UDPServer(sessions chan* Session, config Config, run *bool) {
 
 			connection := &UDPConnection{addr, connServ, 8e9, 8e9}
 
-			ioRequest, err := parseIORequest(ioRequestBuf[:numBytes])
+			ioRequest, err := ParseIORequest(ioRequestBuf[:numBytes])
 			if err != nil {
 				fmt.Println(err, addr, ioRequest.filename)
 				connServ.WriteTo(error[:errorLength], addr)
@@ -356,17 +356,17 @@ func main() {
 
 	config := TftpConfig{fsroot:os.Args[1], fstmp:os.Args[2], ip:os.Args[3], port:port}
 
-	dirExists, _ := exists(config.getFSRoot())
+	dirExists, _ := exists(config.GetFSRoot())
 	if !dirExists {
-		err := os.MkdirAll(config.getFSRoot(), os.ModeDir | 0777)
+		err := os.MkdirAll(config.GetFSRoot(), os.ModeDir | 0777)
 		if err != nil {
 			panic(err)
 		}
 	}
 
-	dirExists, _ = exists(config.getFSTmp())
+	dirExists, _ = exists(config.GetFSTmp())
 	if !dirExists {
-		err := os.MkdirAll(config.getFSTmp(), os.ModeDir | 0777)
+		err := os.MkdirAll(config.GetFSTmp(), os.ModeDir | 0777)
 		if err != nil {
 			panic(err)
 		}

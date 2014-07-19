@@ -46,17 +46,17 @@ func (m *MockConnection) ReadFrom(bytes []byte) (numBytes int, err error) {
 }
 
 func initTest(config Config) {
-	dirExists, _ := exists(config.getFSRoot())
+	dirExists, _ := exists(config.GetFSRoot())
 	if !dirExists {
-		err := os.Mkdir(config.getFSRoot(), os.ModeDir | 0777)
+		err := os.Mkdir(config.GetFSRoot(), os.ModeDir | 0777)
 		if err != nil {
 			panic(err)
 		}
 	}
 
-	dirExists, _ = exists(config.getFSTmp())
+	dirExists, _ = exists(config.GetFSTmp())
 	if !dirExists {
-		err := os.Mkdir(config.getFSTmp(), os.ModeDir | 0777)
+		err := os.Mkdir(config.GetFSTmp(), os.ModeDir | 0777)
 		if err != nil {
 			panic(err)
 		}
@@ -64,12 +64,12 @@ func initTest(config Config) {
 }
 
 func closeTest(config Config) {
-	err := os.RemoveAll(config.getFSRoot())
+	err := os.RemoveAll(config.GetFSRoot())
 	if err != nil {
 		panic(err)
 	}
 
-	err = os.RemoveAll(config.getFSTmp())
+	err = os.RemoveAll(config.GetFSTmp())
 	if err != nil {
 		panic(err)
 	}
@@ -83,7 +83,7 @@ func TestProcessReadRequest(t *testing.T) {
 
 	ioRequest := IORequest{isWrite:false, filename:"test.txt", mode:"octet"}
 
-	fname := fmt.Sprintf("%s%s", config.getFSRoot(),ioRequest.filename)
+	fname := fmt.Sprintf("%s%s", config.GetFSRoot(),ioRequest.filename)
 	CreateTestFile(fname, 512*5+256)
 
 	file, err := os.Open(fname)
@@ -93,7 +93,7 @@ func TestProcessReadRequest(t *testing.T) {
 
 	connection := &MockConnection{file, t, make([]byte, 520), make([]byte, 520), 0, 0, nil, ReadHandler}
 
-	err = processReadRequest(connection, ioRequest, config)
+	err = ProcessReadRequest(connection, ioRequest, config)
 	if err != nil {
 		t.Error(err)
 	}
@@ -103,7 +103,7 @@ func TestProcessReadRequest(t *testing.T) {
 
 func ReadHandler(t *testing.T, f *os.File, dataBlockBytes []byte, ackBytes []byte) int {
 
-	dataBlock, err := parseDataBlock(dataBlockBytes)
+	dataBlock, err := ParseDataBlock(dataBlockBytes)
 	if err != nil {
 		t.Error(err)
 	}
@@ -119,7 +119,7 @@ func ReadHandler(t *testing.T, f *os.File, dataBlockBytes []byte, ackBytes []byt
 	}
 
 	ack := Ack{dataBlock.blockNumber}
-	ackToSlice(ack, ackBytes)
+	AckToSlice(ack, ackBytes)
 
 	return 4
 }
@@ -148,7 +148,7 @@ func TestProcessWriteRequest(t *testing.T) {
 
 	ioRequest := IORequest{isWrite:true, filename:"test.txt", mode:"octet"}
 
-	fname := fmt.Sprintf("%s%s", config.getFSTmp(), "test-expected.txt")
+	fname := fmt.Sprintf("%s%s", config.GetFSTmp(), "test-expected.txt")
 	CreateTestFile(fname, 512*5+256)
 
 	file, err := os.Open(fname)
@@ -158,7 +158,7 @@ func TestProcessWriteRequest(t *testing.T) {
 
 	connection := &MockConnection{file, t, make([]byte, 520), make([]byte, 520), 0, 0, nil, WriteHandler}
 
-	err = processWriteRequest(connection, ioRequest, config)
+	err = ProcessWriteRequest(connection, ioRequest, config)
 	if err != nil {
 		t.Error(err)
 	}
@@ -166,7 +166,7 @@ func TestProcessWriteRequest(t *testing.T) {
 	file.Close()
 
 	hashExpected, _ := getHash(fname)
-	hashActual, _ := getHash(fmt.Sprintf("%s%s", config.getFSRoot(), "test.txt"))
+	hashActual, _ := getHash(fmt.Sprintf("%s%s", config.GetFSRoot(), "test.txt"))
 
 	if hashExpected != hashActual {
 		t.Error("files mismatched while writing")
@@ -175,7 +175,7 @@ func TestProcessWriteRequest(t *testing.T) {
 
 func WriteHandler(t *testing.T, f *os.File, ackBytes []byte, dataBlockBytes []byte) int {
 
-	ack, err := parseAck(ackBytes)
+	ack, err := ParseAck(ackBytes)
 	if err != nil {
 		t.Error(err)
 	}
@@ -187,7 +187,7 @@ func WriteHandler(t *testing.T, f *os.File, ackBytes []byte, dataBlockBytes []by
 	}
 
 	dataBlock := DataBlock{ack.blockNumber+1, buf[:numBytes]}
-	numBytes = dataBlockToSlice(dataBlock, dataBlockBytes)
+	numBytes = DataBlockToSlice(dataBlock, dataBlockBytes)
 
 	return numBytes
 
