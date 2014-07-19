@@ -1,4 +1,4 @@
-package gotftp
+package main
 
 import (
 	"bytes"
