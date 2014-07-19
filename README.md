@@ -1,7 +1,10 @@
-Trivial File Transfer Protocol Server Implementation in Go
-----------------------------------------------------------
-
+#### Trivial File Transfer Protocol Server in Go
+##### Setup:
+```
 $ go get github.com/nalapati/gotftp
+```
+##### Usage:
+```
 $ $GOPATH/bin/gotftp <filesystem root> <filesystem tmp> <interface ip4> <port>
 
 All parameters are required:
@@ -14,15 +17,17 @@ All parameters are required:
                   from <filesystem tmp> to <filesystem root>
 <interface ip4>   The ip of the interface the tftp server should listen on.
 <port>            The port the tftp server should listen on.
-
-Example:
+```
+##### Example:
+```
 $ $GOPATH/bin/gotftp /tmp/fsroot /tmp/fstmp 127.0.0.1 8000
-
+```
 The subset of tftp implemented is rfc1350: http://www.ietf.org/rfc/rfc1350.txt 
 This version of the tftp server returns an illegal request error for pretty much
 all the errors it encounters.
 
-Testing:
+##### Testing:
+```
 $ $GOPATH/bin/gotftp /tmp/fsroot /tmp/fstmp 127.0.0.1 8000
 
 $ echo "hello world" > test.txt
@@ -35,8 +40,10 @@ Sent 12 bytes in 0.0 seconds
 tftp> get test.txt
 Received 12 bytes in 0.0 seconds
 tftp>
+```
 
-Getting Go Setup (2014-07-19):
+##### Getting Go Setup (2014-07-19):
+```
 $ sudo apt-get install golang-go
 $ go env
 
@@ -49,7 +56,9 @@ export PATH="$GOROOT:$PATH"
 
 $ source ~/.bashrc
 $ go env # validate the GOPATH and GOROOT settings
+```
 
-Running the unit tests:
+##### Running the unit tests:
+```
 /usr/bin/go test -v github.com/nalapati/gotftp
-
+```
