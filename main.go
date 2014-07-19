@@ -6,6 +6,7 @@ import (
 	"io"
 	"net"
 	"os"
+	"strconv"
 	"time"
 )
 
@@ -69,6 +70,11 @@ func (u *UDPConnection) ReadFrom(buf []byte) (numBytes int, err error) {
 	return numBytes, err
 }
 
+type Session struct {
+	connection *UDPConnection
+	ioRequest IORequest
+}
+
 /*
 Read State Machine:
 
@@ -88,11 +94,11 @@ func processReadRequest(conn Connection, readRequest IORequest, config Config) e
 	ackBuf := make([]byte, 4)
 
 	file, err := os.Open(fmt.Sprintf("%s%s", config.getFSRoot(), readRequest.filename))
-	defer file.Close()
-
 	if err != nil {
 		return err
 	}
+
+	defer file.Close()
 
 	for {
 		numBytes, err := file.ReadAt(dataBuf, int64((dataBlockNumber-1) * maxDataBufSize))
@@ -208,10 +214,41 @@ func processWriteRequest(conn Connection, writeRequest IORequest, config Config)
 	return nil
 }
 
+//HandleConnection dequeues a session from the session channel and processes
+//the IORequest corresponding to the session.
+func HandleConnection(sessions chan* Session, config Config, run *bool) {
+
+	error := make([]byte, 48)
+	errorLength := toTftpErrorSlice(TftpError{0, "illegal request"}, error)
+
+
+	for session := range sessions {
+
+		if (session.ioRequest.isWrite) {
+			err := processWriteRequest(session.connection, session.ioRequest, config)
+			if err != nil {
+				fmt.Println(err)
+				session.connection.WriteTo(error[:errorLength])
+			}
+		} else {
+			err := processReadRequest(session.connection, session.ioRequest, config)
+			if err != nil {
+				fmt.Println(err)
+				session.connection.WriteTo(error[:errorLength])
+			}
+		}
+
+		if (!*run) {
+			break
+		}
+	}
+
+}
+
 //UDPServer starts a UDP server on the specified ip and port and passes received
 //connections to the connections channel. If the UDP server receives more connections
 //than it can handle it sends an error message to the client and closes the connection.
-func UDPServer(config Config, run *bool) {
+func UDPServer(sessions chan* Session, config Config, run *bool) {
 	fmt.Println("starting UDP Server on ", config.getTftpIP(), config.getTftpPort(), *run)
 
 	ioRequestBuf := make([]byte, maxIOrequestBufSize)
@@ -236,6 +273,7 @@ func UDPServer(config Config, run *bool) {
 		for {
 			numBytes, addr, err := conn.ReadFrom(ioRequestBuf)
 			if err != nil {
+				fmt.Println("error while reading from the tftp listener port")
 				conn.Close()
 				break
 			}
@@ -247,6 +285,7 @@ func UDPServer(config Config, run *bool) {
 
 			connServ, err := net.ListenUDP("udp", &addrServ)
 			if err != nil {
+				fmt.Println("error occurred while listening on udp child socket for ", addr)
 				connServ.Close()
 				conn.Close()
 
@@ -257,20 +296,23 @@ func UDPServer(config Config, run *bool) {
 
 			ioRequest, err := parseIORequest(ioRequestBuf[:numBytes])
 			if err != nil {
+				fmt.Println(err, addr, ioRequest.filename)
 				connServ.WriteTo(error[:errorLength], addr)
 				connServ.Close()
 				break
 			}
 
-			if (ioRequest.isWrite) {
-				err = processWriteRequest(connection, ioRequest, config)
-			} else {
-				err = processReadRequest(connection, ioRequest, config)
-			}
+			session := &Session{connection, ioRequest}
 
-			if err != nil {
-				connServ.WriteTo(error[:errorLength], addr)
-				connServ.Close()
+			select {
+			case sessions <- session:
+				fmt.Printf("Processing session for remote: %s, local: %s, filename: %s, write: %v, mode: %s\n", addr, connServ.LocalAddr(), ioRequest.filename, ioRequest.isWrite, ioRequest.mode)
+			default:
+				fmt.Println("Rejecting session for remote: %s, local: %s, filename: %s, write: %v, mode: %s\n", addr, connServ.LocalAddr(), ioRequest.filename, ioRequest.isWrite, ioRequest.mode)
+				go func() {
+					connServ.WriteTo(error[:errorLength], addr)
+					connServ.Close()
+				}()
 			}
 
 			if !(*run) {
@@ -280,9 +322,27 @@ func UDPServer(config Config, run *bool) {
 	}
 }
 
-func main() {
-	run := true
-	config := TftpConfig{"/tmp/fsroot/", "/tmp/fstmp/", "127.0.0.1", 8000}
+func usage(val int) {
+	fmt.Println("./main <file system root> <file system tmp> <interface ip> <port>")
+	os.Exit(val)
+}
 
-	UDPServer(config, &run)
+func main() {
+	if len(os.Args) < 4 {
+		usage(1)
+	}
+
+	run := true
+	port, err := strconv.Atoi(os.Args[4])
+	if err != nil {
+		panic(err)
+	}
+
+	config := TftpConfig{os.Args[1], os.Args[2], os.Args[3], port}
+	sessions := make(chan *Session, 100)
+
+	for i:=0; i<10; i++ {
+		go HandleConnection(sessions, config, &run)
+	}
+	UDPServer(sessions, config, &run)
 }
