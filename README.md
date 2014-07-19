@@ -22,7 +22,7 @@ All parameters are required:
 ```
 $ $GOPATH/bin/gotftp /tmp/fsroot /tmp/fstmp 127.0.0.1 8000
 ```
-The subset of tftp implemented is rfc1350: http://www.ietf.org/rfc/rfc1350.txt 
+The subset of tftp implemented is [rfc1350](http://www.ietf.org/rfc/rfc1350.txt). 
 This version of the tftp server returns an illegal request error for pretty much
 all the errors it encounters.
 
