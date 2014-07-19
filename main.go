@@ -136,6 +136,8 @@ func processReadRequest(conn Connection, readRequest IORequest, config Config) e
 			break
 		}
 	}
+
+	fmt.Println("read complete! ", readRequest.filename)
 	return nil
 }
 
@@ -207,10 +209,16 @@ func processWriteRequest(conn Connection, writeRequest IORequest, config Config)
 		if dataBlock.isFinal() {
 			final = true
 			file.Close()
-			os.Rename(fmt.Sprintf("%s%s", config.getFSTmp(), writeRequest.filename), fmt.Sprintf("%s%s", config.getFSRoot(), writeRequest.filename))
+
+			oldFilename := fmt.Sprintf("%s%s", config.getFSTmp(), writeRequest.filename)
+			newFilename := fmt.Sprintf("%s%s", config.getFSRoot(), writeRequest.filename)
+			fmt.Printf("renaming %s to %s", oldFilename, newFilename)
+			os.Rename(oldFilename, newFilename)
 		}
 
 	}
+
+	fmt.Println("transfer complete! ", writeRequest.filename)
 	return nil
 }
 
@@ -327,6 +335,14 @@ func usage(val int) {
 	os.Exit(val)
 }
 
+// exists returns whether the given file or directory exists or not
+func exists(path string) (bool, error) {
+	_, err := os.Stat(path)
+	if err == nil { return true, nil }
+	if os.IsNotExist(err) { return false, nil }
+	return false, err
+}
+
 func main() {
 	if len(os.Args) < 4 {
 		usage(1)
@@ -338,7 +354,24 @@ func main() {
 		panic(err)
 	}
 
-	config := TftpConfig{os.Args[1], os.Args[2], os.Args[3], port}
+	config := TftpConfig{fsroot:os.Args[1], fstmp:os.Args[2], ip:os.Args[3], port:port}
+
+	dirExists, _ := exists(config.getFSRoot())
+	if !dirExists {
+		err := os.Mkdir(config.getFSRoot(), os.ModeDir | 0777)
+		if err != nil {
+			panic(err)
+		}
+	}
+
+	dirExists, _ = exists(config.getFSTmp())
+	if !dirExists {
+		err := os.Mkdir(config.getFSTmp(), os.ModeDir | 0777)
+		if err != nil {
+			panic(err)
+		}
+	}
+
 	sessions := make(chan *Session, 100)
 
 	for i:=0; i<10; i++ {

@@ -46,14 +46,20 @@ func (m *MockConnection) ReadFrom(bytes []byte) (numBytes int, err error) {
 }
 
 func initTest(config Config) {
-	err := os.Mkdir(config.getFSRoot(), os.ModeDir | 0777)
-	if err != nil {
-	//	panic(err)
+	dirExists, _ := exists(config.getFSRoot())
+	if !dirExists {
+		err := os.Mkdir(config.getFSRoot(), os.ModeDir | 0777)
+		if err != nil {
+			panic(err)
+		}
 	}
 
-	err = os.Mkdir(config.getFSTmp(), os.ModeDir | 0777)
-	if err != nil {
-	//	panic(err)
+	dirExists, _ = exists(config.getFSTmp())
+	if !dirExists {
+		err := os.Mkdir(config.getFSTmp(), os.ModeDir | 0777)
+		if err != nil {
+			panic(err)
+		}
 	}
 }
 
@@ -135,7 +141,7 @@ func CreateTestFile(filename string, length int) {
 }
 
 func TestProcessWriteRequest(t *testing.T) {
-	config := TftpConfig{"/tmp/fsroot/", "/tmp/fstmp/"}
+	config := TftpConfig{"/tmp/fsroot/", "/tmp/fstmp/", "127.0.0.1", 8000}
 
 	initTest(config)
 	defer closeTest(config)
