@@ -22,9 +22,7 @@ All parameters are required:
 ```
 $ $GOPATH/bin/gotftp /tmp/fsroot /tmp/fstmp 127.0.0.1 8000
 ```
-The subset of tftp implemented is [rfc1350](http://www.ietf.org/rfc/rfc1350.txt). 
-This version of the tftp server returns an illegal request error for pretty much
-all the errors it encounters.
+The tftp implementation is per [rfc1350](http://www.ietf.org/rfc/rfc1350.txt). 
 
 ##### Testing:
 ```
@@ -62,3 +60,6 @@ $ go env # validate the GOPATH and GOROOT settings
 ```
 /usr/bin/go test -v github.com/nalapati/gotftp
 ```
+
+##### History
+1.0 : Basic Implementation responds to wrqs and rrqs, error handling reduces to sending an illegal request for all errors, no retries on failures/timeouts.
