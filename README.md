@@ -62,4 +62,4 @@ $ go env # validate the GOPATH and GOROOT settings
 ```
 
 ##### History
-1.0 : Basic Implementation responds to wrqs and rrqs, error handling reduces to sending an illegal request for all errors, no retries on failures/timeouts.
+1.0 : Basic Implementation responds to wrqs and rrqs, error handling reduces to sending an illegal request for all errors, no retries on failures/timeouts, no buffer pooling.
