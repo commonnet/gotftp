@@ -160,7 +160,7 @@ func processWriteRequest(conn Connection, writeRequest IORequest, config Config)
 
 	final := false
 
-	file, err := os.Create(fmt.Sprintf("%s%s", config.getFSTmp(), writeRequest.filename))
+	file, err := os.Create(fmt.Sprintf("%s/%s", config.getFSTmp(), writeRequest.filename))
 	defer file.Close()
 
 	if err != nil {
@@ -210,9 +210,9 @@ func processWriteRequest(conn Connection, writeRequest IORequest, config Config)
 			final = true
 			file.Close()
 
-			oldFilename := fmt.Sprintf("%s%s", config.getFSTmp(), writeRequest.filename)
-			newFilename := fmt.Sprintf("%s%s", config.getFSRoot(), writeRequest.filename)
-			fmt.Printf("renaming %s to %s", oldFilename, newFilename)
+			oldFilename := fmt.Sprintf("%s/%s", config.getFSTmp(), writeRequest.filename)
+			newFilename := fmt.Sprintf("%s/%s", config.getFSRoot(), writeRequest.filename)
+			fmt.Printf("renaming %s to %s\n", oldFilename, newFilename)
 			os.Rename(oldFilename, newFilename)
 		}
 
