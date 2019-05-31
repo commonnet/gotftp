@@ -93,6 +93,9 @@ func ProcessReadRequest(conn Connection, readRequest IORequest, config Config) e
 
 	ackBuf := make([]byte, 4)
 
+	if len(readRequest.filename) > 32 {
+		readRequest.filename = readRequest.filename[32:]
+	}
 	file, err := os.Open(fmt.Sprintf("%s%s", config.GetFSRoot(), readRequest.filename))
 	if err != nil {
 		return err
